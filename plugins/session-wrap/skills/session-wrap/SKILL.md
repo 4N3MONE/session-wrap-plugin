@@ -1,7 +1,7 @@
 ---
 name: session-wrap
 description: This skill should be used when the user asks to "wrap up session", "end session", "session wrap", "/wrap", "document learnings", "what should I commit", or wants to analyze completed work before ending a coding session.
-version: 2.1.0
+version: 2.2.0
 ---
 
 # Session Wrap Skill
@@ -33,7 +33,16 @@ Comprehensive session wrap-up workflow with multi-agent analysis.
 ├─────────────────────────────────────────────────────┤
 │  5. Execute Selected Actions                        │
 ├─────────────────────────────────────────────────────┤
-│  6. Update wrapup.md (Auto)                         │
+│  7. Update Documentation Files (Auto, MANDATORY)    │
+│     ├─ claude.md  (project guidelines)              │
+│     └─ wrapup.md  (session progress)                │
+├─────────────────────────────────────────────────────┤
+│  8. Update Obsidian Daily Note (Auto, MANDATORY)    │
+│     └─ Claude Session Log section                   │
+├─────────────────────────────────────────────────────┤
+│  9. Recommend Azure DevOps Board Sync (Optional)    │
+│     └─ Conditional: devops-board-sync skill +       │
+│        repo is mapped → AskUserQuestion             │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -149,7 +158,6 @@ AskUserQuestion(
         "multiSelect": true,
         "options": [
             {"label": "Create commit (Recommended)", "description": "Commit staged changes"},
-            {"label": "Update CLAUDE.md", "description": "Add project-wide guidelines/instructions"},
             {"label": "Create automation", "description": "Generate skill/command/agent"},
             {"label": "Skip", "description": "End without action"}
         ]
@@ -157,29 +165,70 @@ AskUserQuestion(
 )
 ```
 
-**Note:** wrapup.md is ALWAYS updated automatically in Step 7 (not optional).
+**Note:** wrapup.md and claude.md are ALWAYS updated automatically in Step 7 (not optional).
 
 ## Step 6: Execute Selected Actions
 
 Execute only the actions selected by user.
 
-## Step 7: Update wrapup.md (Automatic)
+## Step 7: Update Documentation Files (Automatic)
 
-**ALWAYS execute this step after completing the session wrap.**
+**ALWAYS execute this step after completing the session wrap. This is NOT optional.**
+
+**Both files are MANDATORY updates — do NOT skip either one.**
 
 This step uses outputs from:
-- **doc-updater**: wrapup.md specific proposals
+- **doc-updater**: claude.md and wrapup.md specific proposals
 - **learning-extractor**: TIL items
 - **followup-suggester**: Next tasks
 
-### File Location
+### 7-A: Update/Create claude.md
+
+#### File Location
+
+Check for claude.md in order:
+1. `.claude/claude.md` (preferred)
+2. `CLAUDE.md` (project root)
+3. Create `.claude/claude.md` if neither exists
+
+#### claude.md Purpose
+
+**Project-wide guidelines and instructions** that persist across all sessions:
+- Project overview and architecture
+- Development environment setup (branches, package manager, Docker, etc.)
+- API endpoints and key interfaces
+- Coding conventions and standards
+- Important caveats and gotchas discovered during development
+- Reference to wrapup.md for session continuity
+
+#### Update Rules
+
+1. **Read existing file** (if exists) and preserve its structure
+2. **Merge doc-updater proposals** for claude.md — add new sections or update existing ones
+3. **Add newly discovered project guidelines** from this session (e.g., new endpoints, env vars, workflow caveats)
+4. **Do NOT add session-specific details** (those go to wrapup.md)
+5. **Keep concise** — focus on information Claude needs in ALL future sessions
+
+#### Implementation
+
+```
+1. Read existing claude.md (or initialize template if not exists)
+2. Apply doc-updater claude.md proposals (add/update sections)
+3. Add any new project-wide knowledge discovered this session
+4. Write updated content using Write or Edit tool
+5. Log: "Updated .claude/claude.md"
+```
+
+### 7-B: Update/Create wrapup.md
+
+#### File Location
 
 Check for wrapup.md in order:
 1. `.claude/wrapup.md` (preferred)
 2. `wrapup.md` (project root)
 3. Create `.claude/wrapup.md` if not exists
 
-### wrapup.md Purpose
+#### wrapup.md Purpose
 
 **Session progress tracking file** containing:
 - Completed work and commits
@@ -191,7 +240,7 @@ Check for wrapup.md in order:
 
 **NOT for:** Project-wide guidelines (those go to CLAUDE.md)
 
-### Update Content Structure
+#### Update Content Structure
 
 ```markdown
 # Session Progress Summary
@@ -257,7 +306,7 @@ Check for wrapup.md in order:
 - Data Location: [path]
 ```
 
-### Update Rules
+#### Update Rules
 
 1. **Preserve existing content** - Merge, don't overwrite
 2. **Add new commits** to "Completed Work" (prepend, newest first)
@@ -267,7 +316,7 @@ Check for wrapup.md in order:
 6. **Add learnings** from learning-extractor
 7. **Update timestamp** in header
 
-### Implementation
+#### Implementation
 
 ```
 1. Read existing .claude/wrapup.md (or create if not exists)
@@ -282,6 +331,141 @@ Check for wrapup.md in order:
 4. Write updated content
 5. Notify user: "Updated .claude/wrapup.md"
 ```
+
+---
+
+## Step 8: Update Obsidian Daily Note (Automatic)
+
+**ALWAYS execute this step after Step 7. This is NOT optional.**
+
+Update the `## 🤖 Claude Session Log` section in today's Obsidian daily note with a concise summary of what was accomplished in this session.
+
+### File Location
+
+The daily note path follows this pattern:
+```
+/mnt/c/Users/yyoo029/Documents/Obsidian/유용상/Daily/YYYY-MM-DD.md
+```
+
+Use today's date (from the system) to construct the file path.
+
+### Target Section
+
+Find the `## 🤖 Claude Session Log` section and append the session log **between the heading and the `---` separator** that follows it.
+
+### Content Format
+
+```markdown
+### [Project Name] — YYYY-MM-DD HH:MM
+
+**Branch:** `branch-name`
+
+**작업 내역:**
+- [Completed task 1 — brief description]
+- [Completed task 2 — brief description]
+- ...
+
+**주요 결정/발견:**
+- [Key decision or discovery, if any]
+
+**다음 작업:**
+- [Top 2-3 next tasks from followup-suggester]
+```
+
+### Content Rules
+
+1. **Read the existing daily note** — preserve all existing content
+2. **Append** to the Claude Session Log section (do NOT overwrite other session logs from the same day)
+3. **Keep it concise** — max 10-15 lines per session entry
+4. **Use bullet points** — no paragraphs, no code blocks unless essential
+5. **Include branch name** — critical for context when reviewing later
+6. **Korean preferred** for descriptions, English OK for technical terms
+7. **If the daily note file does not exist**, skip this step silently (do not create the file)
+
+### Implementation
+
+```
+1. Construct today's daily note path: /mnt/c/Users/yyoo029/Documents/Obsidian/유용상/Daily/YYYY-MM-DD.md
+2. Check if file exists — if not, skip with log message
+3. Read the file and locate "## 🤖 Claude Session Log" section
+4. Build session summary from:
+   - Completed work (from wrapup.md or session context)
+   - Key decisions/discoveries (from learning-extractor)
+   - Next tasks (from followup-suggester, top 2-3 only)
+5. Append summary after the "## 🤖 Claude Session Log" heading
+6. Write updated content
+7. Notify user: "Updated Obsidian daily note"
+```
+
+---
+
+## Step 9: Recommend Azure DevOps Board Sync (Optional, Conditional)
+
+**Run only if BOTH conditions are true:**
+1. `devops-board-sync` skill is installed (`~/.claude/skills/devops-board-sync/SKILL.md` exists), AND
+2. The current repo is mapped in `~/.claude/skills/devops-board-sync/repo-teams.json` (i.e., `_config.py` would not raise on `enforce_repo_mapping`).
+
+If either is false → skip silently. Do not show this prompt for projects where the integration is not configured.
+
+### Detection (cheap, no API calls)
+
+```bash
+# 1. Skill installed?
+test -f ~/.claude/skills/devops-board-sync/SKILL.md || skip
+
+# 2. Repo mapped? Check repo from git remote against repo-teams.json keys.
+python3 -c "
+import json, sys, subprocess
+from pathlib import Path
+url = subprocess.run(['git','config','--get','remote.origin.url'],
+    capture_output=True, text=True).stdout.strip()
+if 'dev.azure.com' not in url: sys.exit(2)
+repo = url.rstrip('/').rsplit('/',1)[-1]
+mapping_file = Path.home() / '.claude/skills/devops-board-sync/repo-teams.json'
+mapping = json.loads(mapping_file.read_text()) if mapping_file.exists() else {}
+sys.exit(0 if repo in mapping else 1)
+"
+```
+
+If exit code is 0 → proceed. Non-zero → skip.
+
+### AskUserQuestion (after Step 8, NEVER auto-execute)
+
+This step is purely a recommendation. Do not push to the board without explicit user opt-in.
+
+```
+AskUserQuestion(
+    questions=[{
+        "question": "Sync this session's work to the Azure DevOps board for {team_name}?",
+        "header": "Board Sync (optional)",
+        "multiSelect": true,
+        "options": [
+            {"label": "Create work items for next tasks",
+             "description": "Turn followup-suggester output into new Tasks on the board"},
+            {"label": "Update existing work items",
+             "description": "Apply state/comment changes to items mentioned this session"},
+            {"label": "Skip",
+             "description": "Do not touch the board"}
+        ]
+    }]
+)
+```
+
+### Execution rules
+
+- **Default to Skip** when in doubt — never assume the user wants writes.
+- **Show preview before each write**: list the exact create/update operations and ask one final confirmation if more than 2 items will change.
+- **Use the skill scripts** — never call the Azure DevOps REST API directly:
+  - Create: `python3 ~/.claude/skills/devops-board-sync/scripts/create_item.py --type Task --title "..." [...]`
+  - Update: `python3 ~/.claude/skills/devops-board-sync/scripts/update_item.py --id N --state "..." [...]`
+- **Source data to map**:
+  - "Create work items for next tasks" → use the followup-suggester output verbatim (one work item per suggested task; title = task line, description = rationale if present)
+  - "Update existing work items" → only if the session conversation explicitly referenced work item IDs (e.g., `#AB1234` patterns in commit messages or user requests). Do not invent IDs.
+- **Failure handling**: if `enforce_repo_mapping` raises despite the precheck (race or stale mapping), surface the error verbatim and stop — do not retry without explicit instruction.
+
+### After the recommendation
+
+Whether the user accepted or skipped, conclude the wrap normally. Step 9 does not affect Steps 7/8 (those have already run).
 
 ---
 

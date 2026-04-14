@@ -1,0 +1,21 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "4N3MONE-plugins",
+  "owner": {
+    "name": "4N3MONE",
+    "url": "https://github.com/4N3MONE"
+  },
+  "description": "Personal Claude Code plugins (session-wrap with CLAUDE.md + Obsidian daily note + Azure DevOps board sync)",
+  "plugins": [
+    {
+      "name": "session-wrap",
+      "source": "./plugins/session-wrap",
+      "description": "Personalized session-wrap workflow with multi-agent analysis, CLAUDE.md + wrapup.md auto-update, Obsidian daily note log, and optional Azure DevOps board sync",
+      "version": "2.3.0",
+      "author": {
+        "name": "4N3MONE",
+        "url": "https://github.com/4N3MONE"
+      }
+    }
+  ]
+}

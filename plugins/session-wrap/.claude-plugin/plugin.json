@@ -1,0 +1,21 @@
+{
+  "name": "session-wrap",
+  "version": "2.3.0",
+  "description": "Personalized session-wrap workflow with multi-agent analysis. Auto-updates CLAUDE.md + wrapup.md, appends to Obsidian daily note, and (optionally) recommends Azure DevOps board sync after the wrap flow.",
+  "author": {
+    "name": "4N3MONE",
+    "url": "https://github.com/4N3MONE"
+  },
+  "repository": "https://github.com/4N3MONE/session-wrap-plugin",
+  "license": "MIT",
+  "keywords": [
+    "session",
+    "wrap-up",
+    "documentation",
+    "wrapup",
+    "troubleshooting",
+    "multi-agent",
+    "obsidian",
+    "azure-devops"
+  ]
+}
