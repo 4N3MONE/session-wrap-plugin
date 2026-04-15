@@ -41,8 +41,9 @@ Comprehensive session wrap-up workflow with multi-agent analysis.
 │     └─ Claude Session Log section                   │
 ├─────────────────────────────────────────────────────┤
 │  9. Recommend Azure DevOps Board Sync (Optional)    │
-│     └─ Conditional: devops-board-sync skill +       │
-│        repo is mapped → AskUserQuestion             │
+│     └─ Conditional: azure-boards skill installed +  │
+│        repo in ~/.claude/devops-defaults.json       │
+│        → AskUserQuestion                            │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -401,19 +402,20 @@ Find the `## 🤖 Claude Session Log` section and append the session log **betwe
 
 ## Step 9: Recommend Azure DevOps Board Sync (Optional, Conditional)
 
-**Run only if BOTH conditions are true:**
-1. `devops-board-sync` skill is installed (`~/.claude/skills/devops-board-sync/SKILL.md` exists), AND
-2. The current repo is mapped in `~/.claude/skills/devops-board-sync/repo-teams.json` (i.e., `_config.py` would not raise on `enforce_repo_mapping`).
+**Run only if ALL conditions are true:**
+1. `azure-boards` skill is installed (genaikit plugin — `${CLAUDE_PLUGIN_ROOT}/skills/azure-boards/SKILL.md` resolvable via Claude Code's plugin loader).
+2. Current repo is mapped in `~/.claude/devops-defaults.json`.
+3. PAT is available (`AZURE_DEVOPS_EXT_PAT` env var set, or file-stored PAT at `~/.azure/azuredevops/personalAccessTokens`).
 
-If either is false → skip silently. Do not show this prompt for projects where the integration is not configured.
+If any are false → skip silently. Do NOT call `check_auth.sh` here — that script requires AAD login (`az account show`) which is unnecessary for PAT-only users and would wrongly skip the entire step.
 
 ### Detection (cheap, no API calls)
 
 ```bash
-# 1. Skill installed?
-test -f ~/.claude/skills/devops-board-sync/SKILL.md || skip
+# 1. azure-boards skill present (genaikit)?
+ls ~/.claude/plugins/cache/*/genaikit/*/skills/azure-boards/SKILL.md >/dev/null 2>&1 || skip
 
-# 2. Repo mapped? Check repo from git remote against repo-teams.json keys.
+# 2. Repo mapped? Check repo from git remote against devops-defaults.json.
 python3 -c "
 import json, sys, subprocess
 from pathlib import Path
@@ -421,10 +423,13 @@ url = subprocess.run(['git','config','--get','remote.origin.url'],
     capture_output=True, text=True).stdout.strip()
 if 'dev.azure.com' not in url: sys.exit(2)
 repo = url.rstrip('/').rsplit('/',1)[-1]
-mapping_file = Path.home() / '.claude/skills/devops-board-sync/repo-teams.json'
+mapping_file = Path.home() / '.claude/devops-defaults.json'
 mapping = json.loads(mapping_file.read_text()) if mapping_file.exists() else {}
 sys.exit(0 if repo in mapping else 1)
 "
+
+# 3. PAT reachable?
+[ -n "$AZURE_DEVOPS_EXT_PAT" ] || [ -s ~/.azure/azuredevops/personalAccessTokens ] || skip
 ```
 
 If exit code is 0 → proceed. Non-zero → skip.
@@ -455,13 +460,30 @@ AskUserQuestion(
 
 - **Default to Skip** when in doubt — never assume the user wants writes.
 - **Show preview before each write**: list the exact create/update operations and ask one final confirmation if more than 2 items will change.
-- **Use the skill scripts** — never call the Azure DevOps REST API directly:
-  - Create: `python3 ~/.claude/skills/devops-board-sync/scripts/create_item.py --type Task --title "..." [...]`
-  - Update: `python3 ~/.claude/skills/devops-board-sync/scripts/update_item.py --id N --state "..." [...]`
+- **Resolve team defaults from the mapping file** (`~/.claude/devops-defaults.json`). Entry shape: `{"team": "...", "area_path": "...", "iteration_path": "..."}`. `area_path` is required for create; `iteration_path` is optional and, if omitted, resolve the current sprint at runtime:
+  ```bash
+  GENAIKIT=$(ls -d ~/.claude/plugins/cache/*/genaikit/*/skills/azure-boards | head -1)
+  team=$(python3 -c "import json,pathlib; print(json.loads(pathlib.Path.home().joinpath('.claude/devops-defaults.json').read_text())['$repo']['team'])")
+  current_iter=$(az boards iteration team list --team "$team" --timeframe current --output json 2>/dev/null | jq -r '.[0].path // empty' | sed -E 's#\\Iteration\\#\\#')
+  ```
+- **Use genaikit azure-boards scripts** — never call the Azure DevOps REST API directly:
+  ```bash
+  # Create
+  GENAIKIT=$(ls -d ~/.claude/plugins/cache/*/genaikit/*/skills/azure-boards | head -1)
+  tmp=$(mktemp); printf '%s' "$rationale" > "$tmp"
+  bash "$GENAIKIT/scripts/create_work_item.sh" \
+    --type Task --title "$title" \
+    --area "$area_path" --iteration "$current_iter" \
+    --description-file "$tmp"
+  rm -f "$tmp"
+
+  # Update (state transition)
+  bash "$GENAIKIT/scripts/update_work_item.sh" --id "$id" --state "$state"
+  ```
 - **Source data to map**:
   - "Create work items for next tasks" → use the followup-suggester output verbatim (one work item per suggested task; title = task line, description = rationale if present)
   - "Update existing work items" → only if the session conversation explicitly referenced work item IDs (e.g., `#AB1234` patterns in commit messages or user requests). Do not invent IDs.
-- **Failure handling**: if `enforce_repo_mapping` raises despite the precheck (race or stale mapping), surface the error verbatim and stop — do not retry without explicit instruction.
+- **Failure handling**: on non-zero exit from `create_work_item.sh` / `update_work_item.sh`, surface stderr verbatim and stop. Common causes: expired PAT, missing Work Items scope on PAT, wrong iteration path, locked state transition.
 
 ### After the recommendation
 
